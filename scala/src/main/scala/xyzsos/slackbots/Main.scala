@@ -1,14 +1,21 @@
 package xyzsos.slackbots
 
-import colossus._
-import core._
-import service._
-import protocols.http._
-import UrlParsing._
-import HttpMethod._
+import java.net.URLEncoder
+import java.util
+import java.util.Calendar
+
 import akka.actor.ActorSystem
-import akka.event.{BusLogging, LoggingAdapter, LoggingBus}
-import com.typesafe.config.ConfigFactory
+import akka.event.LoggingAdapter
+import colossus._
+import colossus.core._
+import colossus.protocols.http.HttpMethod._
+import colossus.protocols.http.UrlParsing._
+import colossus.protocols.http._
+import colossus.service._
+import dispatch.Defaults._
+import dispatch._
+import org.joda.time.DateTime
+import play.api.libs.json._
 
 import scala.util.Random
 
@@ -34,7 +41,7 @@ class SlackbotsInitializer(worker: WorkerRef) extends Initializer(worker) {
 class SlackbotsService(context: ServerContext) extends HttpService(context) {
 
 	override def handle = {
-		case request @ Post on Root => {
+		case request @ Post on Root =>
 			val payload = request.body.bytes.decodeString("utf-8").split("&").map { s =>
 				s.split("=") match {
 					case x if x.length > 1 => x(0) -> Some(x(1))
@@ -43,13 +50,13 @@ class SlackbotsService(context: ServerContext) extends HttpService(context) {
 			}.toMap[String, Option[String]]
 
 			implicit val impLog: LoggingAdapter = log
+			// implicit val exec: CallbackExecutor = context.context.worker.callbackExecutor
 
 			payload("command") match {
 				case Some(command) if command.contains("piratename") => PirateService(request)
 				case Some(command) if command.contains("crono") => CronoService(request)
 				case _ => Callback.successful(request.badRequest(""))
 			}
-		}
 	}
 
 }
@@ -57,7 +64,7 @@ class SlackbotsService(context: ServerContext) extends HttpService(context) {
 
 trait CommandService {
 
-	def apply(request: HttpRequest)(implicit log: LoggingAdapter): Callback[HttpResponse]
+	def apply(request: HttpRequest)(implicit log: LoggingAdapter, exec: CallbackExecutor): Callback[HttpResponse]
 
 }
 
@@ -72,7 +79,7 @@ object PirateService extends CommandService {
 
 	private val rnd = new Random()
 
-	override def apply(request: HttpRequest)(implicit log: LoggingAdapter) = {
+	override def apply(request: HttpRequest)(implicit log: LoggingAdapter, exec: CallbackExecutor) = {
 
 		val rnd1 = rnd.nextInt(names.length)
 		val rnd2 = rnd.nextInt(midnames.length)
@@ -96,11 +103,91 @@ object CronoService extends CommandService {
 		case _ => throw new Exception("Google Sheets API key not set!")
 	}
 
-	override def apply(request: HttpRequest)(implicit log: LoggingAdapter) = {
+	private val calendar: Calendar = Calendar.getInstance()
 
-		// TODO
-		Callback.successful(request.ok("Cronoprogramma"))
+	private val sheetID = "1Y9hRtRkfHwriZBIheQltTUfbz6YoSZ7mzNgCa-MiB-I"
 
+	override def apply(request: HttpRequest)(implicit log: LoggingAdapter, exec: CallbackExecutor) = {
+
+		val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+		val req = url(getUrl(day))
+		val res = dispatch.Http(req OK as.String).map { s =>
+		  	val json = Json.parse(s)
+			val values = (json \ "values").as[Array[Array[String]]]
+
+			val vals = values(getTimeSlot(new DateTime)).tail.map {
+				case v if v != "" => Some(v)
+				case _ => None
+			}
+
+			val crono: Array[Option[String]] = vals.zipWithIndex.map {
+				case (Some(v), i) => Some(s"${values(0).tail(i)}: $v")
+				case (None, _) => None
+			}
+
+			request.ok(crono.flatten.mkString("\n\n"))
+		}
+
+		Callback.fromFuture(res)
+	}
+
+	private def getUrl(day: Int): String = {
+		val range = URLEncoder.encode(day match {
+			case d if d == 18 => s"lun $d / 7"
+			case d if d == 19 => s"mar $d / 7"
+			case d if d == 20 => s"mer $d / 7"
+			case d if d == 21 => s"gio $d / 7"
+			case d if d == 22 => s"ven $d / 7"
+			case d if d == 23 => s"sab $d / 7"
+			case d if d == 24 => s"dom $d / 7"
+			case d if d == 25 => s"lun $d / 7"
+			case d if d == 26 => s"mar $d / 7"
+			case d if d == 27 => s"mer $d / 7"
+			case d if d == 28 => s"gio $d / 7"
+			case d if d == 29 => s"ven $d / 7"
+			case d if d == 30 => s"sab $d / 7"
+			case _ => "lun 18 / 7"
+		}, "UTF-8") + "!A1:H16"
+
+		s"https://sheets.googleapis.com/v4/spreadsheets/$sheetID/values/$range?key=$key"
+	}
+
+	private def getTimeSlot(date: DateTime = new DateTime): Int = {
+		val h = date.getHourOfDay
+		val m = date.getMinuteOfHour
+
+		if ((h == 9 && m >= 30) || (h == 10 && m <= 30)) {
+			1
+		} else if ((h == 10 && m >= 30) || (h == 11 && m <= 30)) {
+			2
+		} else if ((h == 11 && m >= 30) || (h == 12 && m <= 30)) {
+			3
+		} else if ((h == 12 && m >= 30) || (h == 13 && m <= 30)) {
+			4
+		} else if ((h == 13 && m >= 30) || (h == 14 && m <= 30)) {
+			5
+		} else if ((h == 14 && m >= 30) || (h == 15 && m <= 30)) {
+			6
+		} else if ((h == 15 && m >= 30) || (h == 16 && m <= 30)) {
+			7
+		} else if ((h == 16 && m >= 30) || (h == 17 && m <= 30)) {
+			8
+		} else if ((h == 17 && m >= 30) || (h == 18 && m <= 30)) {
+			9
+		} else if ((h == 18 && m >= 30) || (h == 19 && m <= 30)) {
+			10
+		} else if ((h == 19 && m >= 30) || (h == 20 && m <= 30)) {
+			11
+		} else if ((h == 20 && m >= 30) || (h == 21 && m <= 30)) {
+			12
+		} else if ((h == 21 && m >= 30) || (h == 22 && m <= 30)) {
+			13
+		} else if ((h == 22 && m >= 30) || (h == 23 && m <= 30)) {
+			14
+		} else {
+			0
+		}
 	}
 
 }
