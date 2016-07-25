@@ -7,6 +7,10 @@ import protocols.http._
 import UrlParsing._
 import HttpMethod._
 import akka.actor.ActorSystem
+import akka.event.{BusLogging, LoggingAdapter, LoggingBus}
+import com.typesafe.config.ConfigFactory
+
+import scala.util.Random
 
 
 
@@ -38,6 +42,8 @@ class SlackbotsService(context: ServerContext) extends HttpService(context) {
 				}
 			}.toMap[String, Option[String]]
 
+			implicit val impLog: LoggingAdapter = log
+
 			payload("command") match {
 				case Some(command) if command.contains("piratename") => PirateService(request)
 				case Some(command) if command.contains("crono") => CronoService(request)
@@ -51,7 +57,7 @@ class SlackbotsService(context: ServerContext) extends HttpService(context) {
 
 trait CommandService {
 
-	def apply(request: HttpRequest): Callback[HttpResponse]
+	def apply(request: HttpRequest)(implicit log: LoggingAdapter): Callback[HttpResponse]
 
 }
 
@@ -64,10 +70,19 @@ object PirateService extends CommandService {
 	val adjectives = Array("'Adventure'","'Albatross'","'Backstabber'","'Barbarian'","'Barnacle'","'Bashed'","'Battle-Ex'","'Beastly'","'Betrayer'","'Bird Eye'","'Black Eyes'","'Blunder'","'Blunderbuss'","'Boatswain'","'Brass'","'Braveheart'","'Bribing'","'Brown Teeth'","'Brown Tooth'","'Buccaneer'","'Butcher'","'Cabin Boy'","'Calmness'","'Charming'","'Chipper'","'Clever'","'Cold Hearted'","'Con Artist'","'Confidence'","'Corsair'","'Coward'","'Coxswain'","'Crabby'","'Crafty'","'Cranky'","'Crazy'","'Crazy Eyes'","'Crew Member'","'Crippled'","'Crocked'","'Crooked'","'Cross'","'Crow's Nest'","'Cruel'","'Cruelty'","'Crusty'","'Cunning'","'Cutthroat'","'Daffy'","'Daring'","'Dawg'","'Dazzling'","'Dead Eyes'","'Deceit'","'Deceiver'","'Defiance'","'Defiant'","'Deranged'","'Deserter'","'Devil's Charm'","'Devil's Grin'","'Devil's Smile'","'Devious'","'Disfigured'","'Dishonest'","'Double-Crossed'","'Drop-Dead'","'Dubloon'","'Enchantress'","'Evil Grin'","'Executioner'","'Fearless'","'Femme Fatale'","'Feral'","'Fierce'","'Fierceful'","'First Mate'","'Fishlips'","'Fishwife'","'Fishy'","'Flamboyant'","'Foolish'","'Foul'","'Four Fingers'","'Four-Eyes'","'Four-Teeth'","'Foxy'","'Fraud'","'Freebooter'","'Frenzied'","'Fuming'","'Furious'","'Gentle Heart'","'Ghostly'","'Gloomy'","'Gnarling'","'Goddess'","'Golden Hair'","'Golden Teeth'","'Golden Tooth'","'Golden-Eye'","'Gorgeous'","'Grim'","'Grim Reaper'","'Grimace'","'Grisly'","'Grommet'","'Gunner'","'Handsome'","'Harpy'","'Haunted'","'Hex'","'Hideous'","'Honestly'","'Honorable'","'Hooked'","'Howler'","'Hunter'","'Immortal'","'Imposter'","'Insanity'","'Intrepid'","'Jagged'","'Jolly'","'Keen'","'Killer'","'Landlubber'","'Lazy Eye'","'Liar'","'Lionheart'","'Lost Soul'","'Mad'","'Mad Eye'","'Mad Eyes'","'Marooner'","'Master'","'Medusa'","'Merciless'","'Merry'","'Mumbling'","'Mutiny'","'Naive'","'Nightmare'","'No Cash'","'No Knees'","'No Smile'","'No-Fingers'","'No-Tongue'","'One Eye'","'One Leg'","'One Legged'","'One-Eared'","'One-Tooth'","'Parley'","'Phantasm'","'Pieces of Eight'","'Pirate'","'Plank Walker'","'Plankton'","'Pleasant'","'Pretender'","'Privateer'","'Quartermaster'","'Rage'","'Raider'","'Rambling'","'Reaper'","'Relentless'","'Renegade'","'Rigger'","'Riot'","'Roaring'","'Rough Dog'","'Rum Lover'","'Ruthless'","'Salty'","'Salty Dog'","'Savage'","'Savage Soul'","'Scar Face'","'Scurvy'","'Seafarer'","'Seduction'","'Shaded'","'Shadow'","'Shady'","'Shark Bait'","'She-Devil'","'Shifty'","'Shrew'","'Silver Hair'","'Silver Teeth'","'Silver Tooth'","'Silver-Eye'","'Slayer'","'Slick'","'Slick 'n Sly'","'Sly'","'Smelly'","'Smiling'","'Smooth'","'Snake'","'Snitch'","'Soft Heart'","'Softy'","'Speechless'","'Splinter'","'Squealer'","'Striker'","'Subtle'","'Succubus'","'Swab'","'Swashbuckler'","'Swindler'","'Temptation'","'Temptress'","'The Banished'","'The Bear'","'The Boar'","'The Brave'","'The Bright'","'The Bull'","'The Calm'","'The Cold'","'The Confident'","'The Cook'","'The Coward'","'The Crone'","'The Cruel'","'The Dog'","'The Drunk'","'The Fierce'","'The Flirt'","'The Fool'","'The Fox'","'The Ghost'","'The Hag'","'The Handsome'","'The Hawk'","'The Hero'","'The Honest'","'The Idiot'","'The Journey'","'The Kraken'","'The Legend'","'The Lion'","'The Mad'","'The Marked'","'The Mermaid'","'The Parrot'","'The Rat'","'The Shadow'","'The Siren'","'The Slug'","'The Snake'","'The Sour'","'The Sparrow'","'The Straight'","'The Stubborn'","'The Unseen'","'The Wall'","'The Wild'","'The Witch'","'The Wrath'","'Three-Teeth'","'Tide Turner'","'Timbers'","'Toothless'","'Tormented'","'Tormenting'","'Toxic'","'Traitor'","'Treason'","'Treasure'","'Trickster'","'Tricky'","'Twisting'","'Twitching'","'Two Toes'","'Two-Finger'","'Two-Teeth'","'Ugly Mug'","'Vamp'","'Vicious'","'Vixen'","'Voodoo'","'Vulture'","'Weasel'","'Weird'o'","'Whale'","'Whale-Eye'","'Wheeping'","'Whistle-Blower'","'White Hair'","'Wrathful'","'Yellow Teeth'","'Zigzag'")
 	val nm5 = Array("Black","Bones","Bonney","Booth","Bucker","Buckler","Chane","Combs","Crain","Daniesh","Derane","Dewl","Forten","Hook","Keic","Kidd","Krome","Morris","Paine","Rackham","Shell","Shore","Swien","Tyde","Tydes","Vertect","Vile","Ward","Whulsup","Aranas","Hayward","Starbeeze","Crowley","Nightwind","Hammond","Whitewall","Armstead","Wahl","Darkwalker","Derrington","Chesterhill","Atherton","Walthorn","Mollor","Buckley","Allen","Murray","Sykes","Oxworth","Arnes","Abram","Acton","Addington","Adlam","Ainsworth","Alby","Alden","Allerton","Alston","Altham","Alvingham","Anderton","Appleton","Asheton","Ashley","Ashton","Astley","Atherton","Atterton","Barclay","Barlow","Barney","Barrie","Barton","Beasant","Beckwith","Benson","Bentham","Bentley","Berkeley","Beverly","Bing","Birkenhead","Blackwood","Blakemore","Blankley","Blythe","Bourne","Bradford","Bradley","Bradly","Bradshaw","Brady","Brandon","Branson","Braxton","Breeden","Brent","Bristol","Brooks","Brown","Browning","Brownrigg","Buckley","Bunce","Burbridge","Burlingame","Burton","Bush","Byron","Camden","Carlisle","Carlton","Carlyle","Charlton","Chatham","Cheek","Chester","Cholmondeley","Churchill","Clapham","Clare","Claridge","Clark","Clayden","Clayton","Clemons","Clifford","Clifton","Clinton","Clive","Colby","Colton","Compton","Coombs","Cooper","Copeland","Cotton","Crawford","Crompton","Cromwell","Crowder","Crutchley","Currington","Dalton","Darby","Davenport","Dawson","Dayton","Deighton","Denholm","Digby","Dryden","Dudley","Duke","Dukes","Earle","Eastaughffe","Eastoft","Elton","Emsworth","England","Farnham","Fawcett","Fisc","Fiske","Fletcher","Foy","Fulton","Gale","Garfield","Garrick","Garside","Garthside","Gartside","Gladstone","Godwin","Goodwin","Graeme","Graham","Gresham","Hackney","Hailey","Hale","Haley","Hallewell","Hamet","Hamilton","Hammett","Hampton","Harding","Harley","Harrington","Harrison","Hartford","Hastings","Hayden","Hayes","Hayhurst","Hayley","Helton","Hildom","Holt","Holton","Home","Hornsby","Huckabee","Huxley","Johnson","Keats","Kelsey","Kendal","Kendall","Kent","Kimberley","Kimberly","Kirby","Knotley","Knottley","Lancaster","Landon","Langdon","Langley","Law","Lea","Lee","Leighton","Lester","Lincoln","Lindsay","Lindsey","Livingstone","Luxford","Mabbott","Marlowe","Melling","Melton","Mendenhall","Merton","Middleton","Mildenhall","Milton","Mitchell","Morley","Morton","Myerscough","Nash","Netley","Newberry","Newbery","Newbury","Nibley","Noonan","Norton","Notleigh","Notley","Nottley","Nunnally","Nutlea","Nutlee","Oakley","Ogden","Oldham","Outerbridge","Paddle","Paddley","Padley","Payton","Peddle","Penney","Penny","Perry","Peyton","Pickering","Pinkerton","Prescott","Presley","Preston","Ramsay","Ramsey","Read","Reed","Reeve","Reeves","Reid","Remington","Richmond","Ridley","Riley","Rischer","Rivers","Rodney","Roscoe","Rowley","Royal","Royston","Rudge","Rudges","Rutherford","Rutland","Rylan","Sagar","Sampson","Sharman","Shearman","Shelby","Sheldon","Shelley","Shelly","Sherman","Sherwood","Shirley","Shurman","Sidney","Smit","Smith","Smithe","Smither","Smithers","Smithies","Smithy","Smyth","Smythe","Snape","Snowdon","Soames","Southey","Spalding","Spaulding","Spooner","Springfield","Stafford","Stamper","Stampes","Stanford","Stanley","Stansfield","Stanton","Stevens","Stevenson","Stonebridge","Stratford","Sutherland","Sutton","Swail","Swailes","Swale","Swales","Sweat","Sweet","Sweete","Swet","Swett","Sydney","Tattersall","Thackeray","Thorne","Thornton","Thorp","Thorpe","Tindall","Torp","Townend","Townsend","Trollope","Twynam","Tyndall","Upton","Ward","Watt","Webb","Whatley","Wheatleigh","Wheatley","Whiteley","Whitley","Whitney","Williams","Wither","Withers","Wyther","Yardley","Yeardley","Karayan","Balo","Ethel","Thyme","Vesh","Orfeo","Acheron","Arch","Ark","Morren","Morden","Gloom","Loom","Mace","Lynx","Synth","Acheron","Adam","Alabaster","Amaranth","Antone","Archer","Argent","Asema","Ashes","Bartholomew","Bartram","Blade","Brink","Bryce","Carmine","Chalice","Chandler","Chaos","Charles","Cloven","Damien","Damon","Dante","Darth","Demien","Dhampir","Drachen","Draegan","Drake","Drakkar","Draven","Dred","Edge","Eldritch","Emmit","Enigma","Eulisses","Everit","Fark","Forrest","Frederik","Fromir","Gabriel","Gastly","Glacier","Gnash","Gotham","Grail","Granger","Granite","Grendel","Grim","Hades","Hamlet","Hanzel","Heinrik","Hitch","Hunter","Incubus","Isaac","Isaiah","Jasper","Jaymes","Jeronimo","Jett","Jinx","Karver","Keetes","Klark","Labyrinth","Layre","Lazarus","Leviathan","Lore","Louis","Lucifer","Lucius","Luke","Lynk","Maxim","Mitch","Mitrik","Morrow","Nayte","Nebula","Nicholai","Nightshade","Noire","Norman","Obsidian","Omar","Omen","Otto","Panther","Parch","Parrish","Payne","Peregrine","Petrik","Prince","Pritchard","Prysm","Quint","Quway","Quye","Ragnor","Rakshasas","Rave","Raven","Redcap","Requiem","Richard","Rogue","Romulus","Rumlar","Sabre","Salem","Samuel","Satan","Savant","Sax","Shadow","Shayde","Smoky","Steele","Stone","Storm","Stryker","Tack","Talon","Tempest","Thorne","Thunder","Tristan","Trixter","Uberto","Ulrik","Umbri","Upir","Vail","Valhalla","Vance","Victor","Viktor","Vome","Puck","Loki","Zeus","Hades","Aries","Thor","Zelroth","Zeddicus","Zul","Zorander","Godfrey","Xander","Zander","Zayne","Zayn","Zaine","Zain","Alistair","Crowley","Holmes","Sherlock","Theodore","Theodor","Theodoric","Salvodore","Salvodor","Salvotore","Salvotor","Hogan","Grissom","Eldon","Cidolfus","Rassler","Vaughn","Rexx","Vexx","Lexx","Lucifer","Luther","Lux","Belzebob","Balthier","Larsa","Bane","Reks","Vossler","Laguna","Finch","Fane","Gabranth","Drace","Vayne","Law","Griffin","Arlin","Butler","Artemis","Link","Gail","Lynk","Irvine","Seifer","Zell","Mathian","Auron","Tidus","Firion","Arc","Seymour","Amarant","Wendell","Winmore","Wolf","Wright","Xander","Xensor","Xix","Yao","Ymo","Yulis","Zen","Zeph","Zero","Zindo","Zulu","Vexacion","Kaiser","Karn","Scias","Sisk","Chrom","Kellam","Virion","Inigo","Ike","Marth","Rhys","Soren","Kieran","Reyson","Devdan","Camus","Nealuchi","Sephiran","Zelgius","Seth","Ross","Joshua","Ephraim","Voss","Vossler","Lincoln","Abraham","Driscoll","Alder","Weiss","Larc")
 
-	override def apply(request: HttpRequest) = {
+	private val rnd = new Random()
 
-		// TODO
-		Callback.successful(request.ok("Hello, World!"))
+	override def apply(request: HttpRequest)(implicit log: LoggingAdapter) = {
+
+		val rnd1 = rnd.nextInt(names.length)
+		val rnd2 = rnd.nextInt(midnames.length)
+		val rnd3 = rnd.nextInt(surnames.length)
+
+		val piratename = s"${names(rnd1)} ${midnames(rnd2)} ${surnames(rnd3)}"
+
+		log.info(s"Generated piratename: $piratename")
+
+		Callback.successful(request.ok(s"Arr! Ye pirate name now is $piratename"))
 
 	}
 
@@ -76,7 +91,12 @@ object PirateService extends CommandService {
 
 object CronoService extends CommandService {
 
-	override def apply(request: HttpRequest) = {
+	private val key = System.getenv("SHEETS_API_KEY") match {
+		case s: String => s
+		case _ => throw new Exception("Google Sheets API key not set!")
+	}
+
+	override def apply(request: HttpRequest)(implicit log: LoggingAdapter) = {
 
 		// TODO
 		Callback.successful(request.ok("Cronoprogramma"))
