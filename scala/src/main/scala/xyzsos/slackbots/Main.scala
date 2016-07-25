@@ -51,7 +51,7 @@ class SlackbotsService(context: ServerContext) extends HttpService(context) {
 
 trait CommandService {
 
-	def apply(request: Http#Input): Callback[HttpResponse]
+	def apply(request: HttpRequest): Callback[HttpResponse]
 
 }
 
